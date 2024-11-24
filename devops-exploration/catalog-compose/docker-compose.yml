@@ -1,0 +1,87 @@
+version: "3.8"
+
+services:
+  #catalog-gateway:
+  #  depends_on:
+  #    - catalog
+  #    - purchase
+  #    - catalog-redis
+  #  image: ghcr.io/leandrodalbo/catalog-gateway:latest
+  #  container_name: "catalog-gateway"
+  #  ports:
+  #    - 9000:9000
+  #  environment:
+  #    - SPRING_DATA_REDIS_HOST=catalog-redis
+  #    - PURCHASE_SERVICE_URL=http://purchase:8183
+  #    - CATALOG_SERVICE_URL=http://catalog:8080
+  catalog:
+    depends_on:
+      - catalog-config
+      - catalogdb
+    image: ghcr.io/leandrodalbo/catalog:latest
+    container_name: "catalog"
+    ports:
+      - 8080:8080
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://catalogdb:5432/catalog
+
+  catalog-config:
+    image: ghcr.io/leandrodalbo/catalog-config:latest
+    container_name: "catalog-config"
+    ports:
+      - 8087:8087
+
+  catalogdb:
+    image: "postgres:14.4"
+    container_name: "catalogdb"
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+  purchase:
+    depends_on:
+      - catalog
+      - catalogdb
+    image: ghcr.io/leandrodalbo/purchase-service:latest
+    container_name: "purchase"
+    ports:
+      - 8183:8183
+    environment:
+      - SPRING_R2DBC_URL=r2dbc:postgresql://catalogdb:5432/orders
+      - SPRING_R2DBC_USERNAME=user
+      - SPRING_R2DBC_PASSWORD=password
+      - SPRING_FLYWAY_URL=jdbc:postgresql://catalogdb:5432/orders
+      - SPRING_FLYWAY_USER=user
+      - SPRING_FLYWAY_PASSWORD=password
+      - CATALOG_ENDPOINT-URI=http://catalog:8080
+      - SPRING_RABBITMQ_HOST=catalog-rabbit
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=user
+      - SPRING_RABBITMQ_PASSWORD=password
+  keycloak-service:
+    image: "quay.io/keycloak/keycloak:19.0"
+    container_name: "keycloak"
+    command: start-dev --import-realm
+    volumes:
+      - ./keycloak.json:/opt/keycloak/data/import/keycloak.json
+    environment:
+      - KEYCLOAK_ADMIN=user
+      - KEYCLOAK_ADMIN_PASSWORD=password
+    ports:
+      - 8091:8080
+  catalog-redis:
+    image: "redis:7.0"
+    container_name: "catalog-redis"
+    ports:
+      - 6379:6379
+  catalog-rabbit:
+    image: "rabbitmq:3.10-management"
+    container_name: "catalog-rabbit"
+    ports:
+      - 5672:5672
+      - 15672:15672
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
